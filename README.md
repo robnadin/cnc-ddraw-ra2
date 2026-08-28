@@ -63,11 +63,22 @@ when the render target actually covers the display.
 `WM_APP+120` makes the renderer take a screenshot, so an external script can grab a frame
 without touching the keyboard. `tools/ra2shot.ps1` is the driver.
 
+### `RA2Video.exe` — a settings picker that respects `fixchilds`
+
+A standalone renderer and resolution picker for `ddraw.ini`, in `ra2video/`. Build it with
+`ra2video\build.cmd`.
+
+The Mental Omega client has its own video settings screen, but it does not know
+`fixchilds=5` exists and rewrites `ddraw.ini` when you use it. `RA2Video.exe` writes the
+`[ddraw]`, `[game]`, `[gamemd]`, `[ra2]` and `[ra2md]` sections and leaves `fixchilds`
+alone. MO also validates the resolution against real display modes and resets anything
+non-standard to 800x600, so the picker offers only modes that survive that.
+
 ## Install
 
 Download the zip from [Releases](../../releases) and drop `ddraw.dll`, `ddraw.ini` and
 the `Shaders` folder into your game folder (the one with `gamemd.exe` / `game.exe`).
-Then set `fixchilds=5` as described above.
+`fixchilds=5` is already set in the bundled ini. `RA2Video.exe` is optional.
 
 Pairs well with
 [ra2-hwcursor-wasd](https://github.com/gitTerebi/ra2-hwcursor-wasd), which replaces the
@@ -80,7 +91,8 @@ msbuild cnc-ddraw.vcxproj /p:Configuration=Release /p:Platform=Win32 /p:Platform
 ```
 
 Output is `bin\Release\ddraw.dll`. Upstream's `build.cmd` wants a `make` that is not
-present here; MSBuild is the working path.
+present here; MSBuild is the working path. `ra2video\build.cmd` builds the settings
+picker separately, with the VS 2022 x86 toolset.
 
 ## Licence and credit
 

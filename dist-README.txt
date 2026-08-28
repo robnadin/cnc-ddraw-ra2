@@ -73,11 +73,27 @@ real Windows one, and adds optional WASD map scrolling:
 https://github.com/gitTerebi/ra2-hwcursor-wasd
 
 
+RA2Video.exe
+------------
+Optional. A small renderer and resolution picker for ddraw.ini. Run it from
+the game folder, pick a resolution and renderer, save.
+
+Worth having because the Mental Omega client's own settings screen does not
+know fixchilds=5 exists, and rewrites ddraw.ini when you use it. RA2Video
+writes the [ddraw], [game], [gamemd], [ra2] and [ra2md] sections and leaves
+fixchilds alone.
+
+MO also validates the game resolution against real display modes, so a
+non-standard value gets reset to 800x600 on the next launch. Stick to the
+listed modes.
+
+
 Files
 -----
 ddraw.dll     the renderer
 ddraw.ini     trimmed to RA2/YR, fixchilds=5 already set
 Shaders\      upstream's shader pack, unmodified
+RA2Video.exe  renderer/resolution picker, optional
 LICENSE       MIT, FunkyFr3sh
 
 32-bit only, matching the game. Not affiliated with or endorsed by EA.
