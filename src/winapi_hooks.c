@@ -40,8 +40,8 @@ BOOL WINAPI fake_GetCursorPos(LPPOINT lpPoint)
     if ((g_mouse_locked || g_config.devmode || g_ddraw.bnet_active) && 
         (!g_config.windowed || real_ScreenToClient(g_ddraw.hwnd, &pt)))
     {
-        int x = max(pt.x - g_ddraw.mouse.x_adjust, 0);
-        int y = max(pt.y - g_ddraw.mouse.y_adjust, 0);
+        int x = max(pt.x - util_mouse_x_adjust(), 0);
+        int y = max(pt.y - util_mouse_y_adjust(), 0);
 
         if (g_config.adjmouse && !g_ddraw.child_window_exists)
         {
@@ -52,10 +52,10 @@ BOOL WINAPI fake_GetCursorPos(LPPOINT lpPoint)
         x = min(x, g_ddraw.width - 1);
         y = min(y, g_ddraw.height - 1);
 
-        if (g_config.vhack && 
-            !g_ddraw.isworms2 && 
-            !g_config.devmode && 
-            !g_ddraw.bnet_active && 
+        if (g_config.vhack &&
+            !g_ddraw.isworms2 &&
+            !g_config.devmode &&
+            !g_ddraw.bnet_active &&
             InterlockedExchangeAdd(&g_ddraw.upscale_hack_active, 0))
         {
             int diffx = 0;
@@ -128,8 +128,8 @@ BOOL WINAPI fake_ClipCursor(const RECT* lpRect)
 
         OffsetRect(
             &dst_rc,
-            g_ddraw.mouse.x_adjust, 
-            g_ddraw.mouse.y_adjust);
+            util_mouse_x_adjust(),
+            util_mouse_y_adjust());
 
         CopyRect(&g_ddraw.mouse.rc, &dst_rc);
 
@@ -268,8 +268,8 @@ BOOL WINAPI fake_SetCursorPos(int X, int Y)
         pt.y = (LONG)(roundf(pt.y * g_ddraw.mouse.scale_y));
     }
 
-    pt.x += g_ddraw.mouse.x_adjust;
-    pt.y += g_ddraw.mouse.y_adjust;
+    pt.x += util_mouse_x_adjust();
+    pt.y += util_mouse_y_adjust();
 
     return real_ClientToScreen(g_ddraw.hwnd, &pt) && real_SetCursorPos(pt.x, pt.y);
 }
@@ -281,6 +281,52 @@ HWND WINAPI fake_WindowFromPoint(POINT Point)
 
     POINT pt = { Point.x, Point.y };
     return real_ClientToScreen(g_ddraw.hwnd, &pt) ? real_WindowFromPoint(pt) : NULL;
+}
+
+HWND WINAPI fake_ChildWindowFromPoint(HWND hWndParent, POINT Point)
+{
+    HWND result = real_ChildWindowFromPoint(hWndParent, Point);
+
+    if (g_config.fixchilds == FIX_CHILDS_REMAP_INPUT &&
+        (!result || result == hWndParent) &&
+        g_ddraw.render.viewport.width > 0 &&
+        g_ddraw.render.viewport.height > 0)
+    {
+        POINT pt = Point;
+
+        pt.x = (LONG)(roundf(pt.x * ((float)g_ddraw.width / g_ddraw.render.viewport.width)));
+        pt.y = (LONG)(roundf(pt.y * ((float)g_ddraw.height / g_ddraw.render.viewport.height)));
+
+        HWND scaled = real_ChildWindowFromPoint(hWndParent, pt);
+
+        if (scaled && scaled != hWndParent)
+            result = scaled;
+    }
+
+    return result;
+}
+
+HWND WINAPI fake_ChildWindowFromPointEx(HWND hWndParent, POINT Point, UINT flags)
+{
+    HWND result = real_ChildWindowFromPointEx(hWndParent, Point, flags);
+
+    if (g_config.fixchilds == FIX_CHILDS_REMAP_INPUT &&
+        (!result || result == hWndParent) &&
+        g_ddraw.render.viewport.width > 0 &&
+        g_ddraw.render.viewport.height > 0)
+    {
+        POINT pt = Point;
+
+        pt.x = (LONG)(roundf(pt.x * ((float)g_ddraw.width / g_ddraw.render.viewport.width)));
+        pt.y = (LONG)(roundf(pt.y * ((float)g_ddraw.height / g_ddraw.render.viewport.height)));
+
+        HWND scaled = real_ChildWindowFromPointEx(hWndParent, pt, flags);
+
+        if (scaled && scaled != hWndParent)
+            result = scaled;
+    }
+
+    return result;
 }
 
 BOOL WINAPI fake_GetClipCursor(LPRECT lpRect)
@@ -634,8 +680,8 @@ void HandleMessage(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMa
     {
         if (!g_config.windowed || real_ScreenToClient(g_ddraw.hwnd, &lpMsg->pt))
         {
-            int x = max(lpMsg->pt.x - g_ddraw.mouse.x_adjust, 0);
-            int y = max(lpMsg->pt.y - g_ddraw.mouse.y_adjust, 0);
+            int x = max(lpMsg->pt.x - util_mouse_x_adjust(), 0);
+            int y = max(lpMsg->pt.y - util_mouse_y_adjust(), 0);
 
             if (g_config.adjmouse)
             {
@@ -727,8 +773,8 @@ void HandleMessage(LPMSG lpMsg, HWND hWnd, UINT wMsgFilterMin, UINT wMsgFilterMa
                 lpMsg->lParam = MAKELPARAM(pt.x, pt.y);
             }
 
-            int x = max(GET_X_LPARAM(lpMsg->lParam) - g_ddraw.mouse.x_adjust, 0);
-            int y = max(GET_Y_LPARAM(lpMsg->lParam) - g_ddraw.mouse.y_adjust, 0);
+            int x = max(GET_X_LPARAM(lpMsg->lParam) - util_mouse_x_adjust(), 0);
+            int y = max(GET_Y_LPARAM(lpMsg->lParam) - util_mouse_y_adjust(), 0);
 
             if (g_config.adjmouse)
             {

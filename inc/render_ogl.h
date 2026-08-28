@@ -6,6 +6,7 @@
 
 #define TEXTURE_COUNT 4
 #define FBO_COUNT 2
+#define MID_SHADER_COUNT 6
 
 #ifdef _DEBUG
 #define GL_CHECK(stmt) do { \
@@ -50,6 +51,11 @@ typedef struct OGLRENDERER
     BOOL use_opengl;
     BOOL filter_bilinear;
     BOOL shader2_upscale;
+    int mid_count;
+    GLuint mid_program[MID_SHADER_COUNT];
+    GLuint mid_vao[MID_SHADER_COUNT];
+    GLuint mid_vbos[MID_SHADER_COUNT][3];
+    GLint mid_frame_count_uni_loc[MID_SHADER_COUNT];
 } OGLRENDERER;
 
 DWORD WINAPI ogl_render_main(void);

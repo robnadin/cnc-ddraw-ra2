@@ -1019,7 +1019,12 @@ HRESULT dd_SetDisplayMode(DWORD dwWidth, DWORD dwHeight, DWORD dwBPP, DWORD dwFl
         g_ddraw.mouse.rc.bottom = g_ddraw.render.viewport.height + g_ddraw.mouse.y_adjust;
     }
 
-    if (nonexclusive || (g_config.nonexclusive && !g_config.windowed && g_ddraw.renderer == ogl_render_main))
+    BOOL covers_screen =
+        g_ddraw.render.width >= (int)g_ddraw.mode.dmPelsWidth &&
+        g_ddraw.render.height >= (int)g_ddraw.mode.dmPelsHeight;
+
+    if (covers_screen &&
+        (nonexclusive || (g_config.nonexclusive && !g_config.windowed && g_ddraw.renderer == ogl_render_main)))
     {
         g_ddraw.render.height++;
         g_ddraw.render.opengl_y_align = 1;

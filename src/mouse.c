@@ -36,16 +36,19 @@ void mouse_lock()
         RECT rc = { 0 };
         real_GetClientRect(g_ddraw.hwnd, &rc);
         real_MapWindowPoints(g_ddraw.hwnd, HWND_DESKTOP, (LPPOINT)&rc, 2);
-        OffsetRect(&rc, g_ddraw.render.viewport.x, g_ddraw.render.viewport.y);
+        OffsetRect(&rc, util_mouse_x_adjust(), util_mouse_y_adjust());
 
         int cur_x = InterlockedExchangeAdd((LONG*)&g_ddraw.cursor.x, 0);
         int cur_y = InterlockedExchangeAdd((LONG*)&g_ddraw.cursor.y, 0);
 
+        BOOL scaled = g_config.adjmouse && !g_ddraw.child_window_exists;
+
         real_SetCursorPos(
-            g_config.adjmouse ? (int)(rc.left + (cur_x * g_ddraw.mouse.scale_x)) : rc.left + cur_x,
-            g_config.adjmouse ? (int)(rc.top + (cur_y * g_ddraw.mouse.scale_y)) : rc.top + cur_y);
+            scaled ? (int)(rc.left + (cur_x * g_ddraw.mouse.scale_x)) : rc.left + cur_x,
+            scaled ? (int)(rc.top + (cur_y * g_ddraw.mouse.scale_y)) : rc.top + cur_y);
 
         CopyRect(&rc, &g_ddraw.mouse.rc);
+        OffsetRect(&rc, util_mouse_x_adjust() - g_ddraw.mouse.x_adjust, util_mouse_y_adjust() - g_ddraw.mouse.y_adjust);
         real_MapWindowPoints(g_ddraw.hwnd, HWND_DESKTOP, (LPPOINT)&rc, 2);
         real_ClipCursor(&rc);
 
@@ -68,14 +71,16 @@ void mouse_unlock()
         RECT rc = { 0 };
         real_GetClientRect(g_ddraw.hwnd, &rc);
         real_MapWindowPoints(g_ddraw.hwnd, HWND_DESKTOP, (LPPOINT)&rc, 2);
-        OffsetRect(&rc, g_ddraw.render.viewport.x, g_ddraw.render.viewport.y);
+        OffsetRect(&rc, util_mouse_x_adjust(), util_mouse_y_adjust());
 
         int cur_x = InterlockedExchangeAdd((LONG*)&g_ddraw.cursor.x, 0);
         int cur_y = InterlockedExchangeAdd((LONG*)&g_ddraw.cursor.y, 0);
 
+        BOOL scaled = !g_ddraw.child_window_exists;
+
         real_SetCursorPos(
-            (int)(rc.left + (cur_x * g_ddraw.mouse.scale_x)),
-            (int)(rc.top + (cur_y * g_ddraw.mouse.scale_y)));
+            scaled ? (int)(rc.left + (cur_x * g_ddraw.mouse.scale_x)) : rc.left + cur_x,
+            scaled ? (int)(rc.top + (cur_y * g_ddraw.mouse.scale_y)) : rc.top + cur_y);
 
         real_SetCursor(LoadCursor(NULL, IDC_ARROW));
 

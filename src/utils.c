@@ -1,6 +1,7 @@
 #include <windows.h>
 #include <intrin.h>
 #include <stdio.h>
+#include <stdarg.h>
 #include <math.h>
 #include <tlhelp32.h>
 #include "ddraw.h"
@@ -960,6 +961,95 @@ BOOL CALLBACK util_enum_thread_wnd_proc(HWND hwnd, LPARAM lParam)
     return TRUE;
 }
 
+#define CCD_PREV_PROC "ccd_prev_proc"
+
+static BOOL CALLBACK util_disable_grandchild_hittest(HWND hwnd, LPARAM lparam);
+
+static LRESULT CALLBACK util_passthrough_proc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+    WNDPROC prev = (WNDPROC)GetPropA(hwnd, CCD_PREV_PROC);
+
+    if (!prev)
+        return DefWindowProcA(hwnd, msg, wparam, lparam);
+
+    if (msg == WM_NCHITTEST)
+        return HTTRANSPARENT;
+
+    if (msg == WM_NCDESTROY)
+    {
+        real_SetWindowLongA(hwnd, GWL_WNDPROC, (LONG)prev);
+        RemovePropA(hwnd, CCD_PREV_PROC);
+
+        if (g_ddraw.input_child == hwnd)
+            g_ddraw.input_child = NULL;
+    }
+
+    return CallWindowProcA(prev, hwnd, msg, wparam, lparam);
+}
+
+static void util_remap_child_input(HWND hwnd)
+{
+    if (!g_ddraw.input_child_next)
+        g_ddraw.input_child_next = hwnd;
+
+    if (GetPropA(hwnd, CCD_PREV_PROC))
+        return;
+
+    WNDPROC prev = (WNDPROC)real_SetWindowLongA(hwnd, GWL_WNDPROC, (LONG)util_passthrough_proc);
+
+    if (prev)
+    {
+        SetPropA(hwnd, CCD_PREV_PROC, (HANDLE)prev);
+        g_ddraw.input_child = hwnd;
+    }
+}
+
+static BOOL CALLBACK util_disable_grandchild_hittest(HWND hwnd, LPARAM lparam)
+{
+    if (GetPropA(hwnd, CCD_PREV_PROC))
+        return TRUE;
+
+    WNDPROC prev = (WNDPROC)real_SetWindowLongA(hwnd, GWL_WNDPROC, (LONG)util_passthrough_proc);
+
+    if (prev)
+        SetPropA(hwnd, CCD_PREV_PROC, (HANDLE)prev);
+
+    return TRUE;
+}
+
+static HHOOK g_child_input_hook;
+
+static LRESULT CALLBACK util_child_cbt_proc(int code, WPARAM wparam, LPARAM lparam)
+{
+    if (code == HCBT_CREATEWND && g_config.fixchilds == FIX_CHILDS_REMAP_INPUT)
+    {
+        CBT_CREATEWNDA* cbt = (CBT_CREATEWNDA*)lparam;
+
+        if (cbt && cbt->lpcs && cbt->lpcs->hwndParent == g_ddraw.hwnd)
+            util_remap_child_input((HWND)wparam);
+    }
+
+    return CallNextHookEx(g_child_input_hook, code, wparam, lparam);
+}
+
+void util_install_child_input_hook()
+{
+    if (g_child_input_hook || g_config.fixchilds != FIX_CHILDS_REMAP_INPUT || !g_ddraw.gui_thread_id)
+        return;
+
+    g_child_input_hook = SetWindowsHookExA(WH_CBT, util_child_cbt_proc, NULL, g_ddraw.gui_thread_id);
+}
+
+int util_mouse_x_adjust()
+{
+    return g_ddraw.child_window_exists ? 0 : g_ddraw.mouse.x_adjust;
+}
+
+int util_mouse_y_adjust()
+{
+    return g_ddraw.child_window_exists ? 0 : g_ddraw.mouse.y_adjust;
+}
+
 BOOL CALLBACK util_enum_child_proc(HWND hwnd, LPARAM lparam)
 {
     IDirectDrawSurfaceImpl* this = (IDirectDrawSurfaceImpl*)lparam;
@@ -987,8 +1077,12 @@ BOOL CALLBACK util_enum_child_proc(HWND hwnd, LPARAM lparam)
         if (parent != g_ddraw.hwnd || size.right <= 1 || size.bottom <= 1 || _strcmpi(class_name, "Edit") == 0)
             return TRUE;
 
+        if (g_config.fixchilds == FIX_CHILDS_REMAP_INPUT)
+            util_remap_child_input(hwnd);
+
         if (g_config.fixchilds == FIX_CHILDS_DETECT_HIDE ||
             g_config.fixchilds == FIX_CHILDS_DETECT_HIDE_NOSCALE ||
+            g_config.fixchilds == FIX_CHILDS_REMAP_INPUT ||
             strcmp(class_name, "Cc2EditClassTh") == 0 ||
             strcmp(class_name, "msctls_statusbar32") == 0 ||
             strcmp(class_name, "VideoRenderer") == 0 ||
@@ -1017,6 +1111,9 @@ BOOL CALLBACK util_enum_child_proc(HWND hwnd, LPARAM lparam)
                     SWP_ASYNCWINDOWPOS | SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_NOOWNERZORDER
                 );
             }
+
+            if (g_config.fixchilds == FIX_CHILDS_REMAP_INPUT)
+                EnumChildWindows(hwnd, util_disable_grandchild_hittest, 0);
         }
         else if (!(exstyle & WS_EX_TRANSPARENT))
         {

@@ -16,6 +16,101 @@
 #include "versionhelpers.h"
 
 
+static void wndproc_release_pressed()
+{
+    HWND pressed = g_ddraw.input_pressed;
+
+    if (!pressed)
+        return;
+
+    g_ddraw.input_pressed = NULL;
+
+    if (IsWindow(pressed))
+        PostMessageA(pressed, BM_SETSTATE, FALSE, 0);
+}
+
+static BOOL wndproc_forward_child_input(UINT msg, WPARAM wparam, int x, int y)
+{
+    HWND dlg = g_ddraw.input_child;
+
+    if (!dlg || !IsWindow(dlg) || !IsWindowVisible(dlg))
+        return FALSE;
+
+    POINT pt = { x, y };
+    real_MapWindowPoints(g_ddraw.hwnd, dlg, &pt, 1);
+
+    HWND target = fake_ChildWindowFromPointEx(dlg, pt, CWP_SKIPINVISIBLE | CWP_SKIPDISABLED);
+
+    if (!target || target == dlg)
+        return FALSE;
+
+    POINT tp = pt;
+    real_MapWindowPoints(dlg, target, &tp, 1);
+
+    RECT trc;
+    if (real_GetClientRect(target, &trc) &&
+        (tp.x < 0 || tp.y < 0 || tp.x >= trc.right || tp.y >= trc.bottom))
+    {
+        tp.x = trc.right / 2;
+        tp.y = trc.bottom / 2;
+    }
+
+    char class_name[16] = { 0 };
+    GetClassNameA(target, class_name, sizeof(class_name) - 1);
+
+    BOOL is_button = _strcmpi(class_name, "Button") == 0;
+
+    if (_strcmpi(class_name, "Static") == 0)
+    {
+        SendMessageA(dlg, msg, wparam, MAKELPARAM(pt.x, pt.y));
+        return TRUE;
+    }
+
+    switch (msg)
+    {
+    case WM_LBUTTONDOWN:
+    case WM_LBUTTONDBLCLK:
+        if (is_button)
+        {
+            wndproc_release_pressed();
+            g_ddraw.input_pressed = target;
+            PostMessageA(target, BM_SETSTATE, TRUE, 0);
+            return TRUE;
+        }
+        break;
+
+    case WM_LBUTTONUP:
+    {
+        HWND pressed = g_ddraw.input_pressed;
+        wndproc_release_pressed();
+
+        if (is_button && (!pressed || pressed == target))
+        {
+            PostMessageA(target, BM_CLICK, 0, 0);
+            return TRUE;
+        }
+
+        if (is_button)
+            return TRUE;
+
+        break;
+    }
+
+    case WM_MOUSEMOVE:
+        if (g_ddraw.input_pressed && g_ddraw.input_pressed != target)
+            PostMessageA(g_ddraw.input_pressed, BM_SETSTATE, FALSE, 0);
+        else if (g_ddraw.input_pressed)
+            PostMessageA(g_ddraw.input_pressed, BM_SETSTATE, TRUE, 0);
+        break;
+
+    default:
+        break;
+    }
+
+    PostMessageA(target, msg, wparam, MAKELPARAM(tp.x, tp.y));
+    return TRUE;
+}
+
 LRESULT CALLBACK fake_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 #ifdef _DEBUG
@@ -42,6 +137,13 @@ LRESULT CALLBACK fake_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 
     switch (uMsg)
     {
+    case WM_TAKE_SCREENSHOT:
+    {
+        if (g_ddraw.primary)
+            ss_take_screenshot(g_ddraw.primary);
+
+        return 0;
+    }
     case WM_NULL:
     case WM_MOVING:
     case WM_NCLBUTTONDOWN:
@@ -908,6 +1010,9 @@ LRESULT CALLBACK fake_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
             InterlockedExchange((LONG*)&g_ddraw.cursor.x, x);
             InterlockedExchange((LONG*)&g_ddraw.cursor.y, y);
 
+            if (g_config.fixchilds == FIX_CHILDS_REMAP_INPUT)
+                wndproc_forward_child_input(uMsg, wParam, x, y);
+
             mouse_lock();
             return 0;
         }
@@ -966,6 +1071,12 @@ LRESULT CALLBACK fake_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
         InterlockedExchange((LONG*)&g_ddraw.cursor.y, y);
 
         lParam = MAKELPARAM(x, y);
+
+        if (g_config.fixchilds == FIX_CHILDS_REMAP_INPUT &&
+            wndproc_forward_child_input(uMsg, wParam, x, y))
+        {
+            return 0;
+        }
 
         break;
     }

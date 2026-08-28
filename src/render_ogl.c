@@ -18,6 +18,54 @@ static void ogl_create_textures(int width, int height);
 static void ogl_init_main_program();
 static void ogl_init_shader1_program();
 static void ogl_init_shader2_program();
+static void ogl_init_mid_programs();
+
+static void ogl_resolve_shader_path(const char* name, char* out, size_t size)
+{
+    strncpy(out, name, size);
+    out[size - 1] = '\0';
+
+    if (GetFileAttributes(out) == INVALID_FILE_ATTRIBUTES)
+        _snprintf(out, size - 1, "%s%s", g_config.dll_path, name);
+}
+
+static int ogl_split_shader_chain(const char* value, char chain[][MAX_PATH])
+{
+    int count = 0;
+    const char* cur = value;
+
+    if (!value || !strchr(value, '|'))
+        return 0;
+
+    while (*cur && count < MID_SHADER_COUNT + 2)
+    {
+        const char* sep = strchr(cur, '|');
+        size_t len = sep ? (size_t)(sep - cur) : strlen(cur);
+
+        while (len && (*cur == ' ' || *cur == '\t'))
+        {
+            cur++;
+            len--;
+        }
+
+        while (len && (cur[len - 1] == ' ' || cur[len - 1] == '\t'))
+            len--;
+
+        if (len && len < MAX_PATH)
+        {
+            memcpy(chain[count], cur, len);
+            chain[count][len] = '\0';
+            count++;
+        }
+
+        if (!sep)
+            break;
+
+        cur = sep + 1;
+    }
+
+    return count;
+}
 static void ogl_render();
 static BOOL ogl_release_resources();
 static BOOL ogl_texture_upload_test();
@@ -125,6 +173,7 @@ DWORD WINAPI ogl_render_main(void)
         GL_CHECK(ogl_init_main_program());
         GL_CHECK(ogl_init_shader1_program());
         GL_CHECK(ogl_init_shader2_program());
+        GL_CHECK(ogl_init_mid_programs());
 
         g_ogl.got_error = g_ogl.got_error || (err = glGetError()) != GL_NO_ERROR;
         GL_CHECK(g_ogl.got_error = g_ogl.got_error || !ogl_texture_upload_test());
@@ -216,6 +265,7 @@ static HGLRC ogl_create_core_context(HDC hdc)
 static void ogl_build_programs()
 {
     g_ogl.main_program = g_ogl.shader1_program = g_ogl.shader2_program = 0;
+    g_ogl.mid_count = 0;
 
     g_ogl.shader2_upscale = FALSE;
     BOOL core_profile = wglCreateContextAttribsARB != NULL;
@@ -238,14 +288,22 @@ static void ogl_build_programs()
         BOOL bilinear = FALSE;
         char shader_path[MAX_PATH] = { 0 };
 
+        char chain[MID_SHADER_COUNT + 2][MAX_PATH] = { 0 };
+        int chain_count = ogl_split_shader_chain(g_config.shader, chain);
+
         if (g_ogl.main_program)
         {
-            strncpy(shader_path, g_config.shader, sizeof(shader_path));
+            strncpy(shader_path, chain_count > 1 ? chain[0] : g_config.shader, sizeof(shader_path));
             shader_path[sizeof(shader_path) - 1] = '\0'; /* strncpy fix */
 
             if (GetFileAttributes(shader_path) == INVALID_FILE_ATTRIBUTES)
             {
-                _snprintf(shader_path, sizeof(shader_path) - 1, "%s%s", g_config.dll_path, g_config.shader);
+                _snprintf(
+                    shader_path,
+                    sizeof(shader_path) - 1,
+                    "%s%s",
+                    g_config.dll_path,
+                    chain_count > 1 ? chain[0] : g_config.shader);
             }
 
             /* Hack for Intel HD 4000 driver bug - force default shader */
@@ -309,7 +367,27 @@ static void ogl_build_programs()
             g_oglu_got_version3 = FALSE;
         }
 
-        if (g_ogl.shader1_program)
+        if (g_ogl.shader1_program && chain_count > 1)
+        {
+            char path[MAX_PATH] = { 0 };
+
+            ogl_resolve_shader_path(chain[chain_count - 1], path, sizeof(path));
+            g_ogl.shader2_program = oglu_build_program_from_file(path, core_profile);
+
+            if (g_ogl.shader2_program)
+            {
+                for (int i = 1; i < chain_count - 1 && g_ogl.mid_count < MID_SHADER_COUNT; i++)
+                {
+                    ogl_resolve_shader_path(chain[i], path, sizeof(path));
+
+                    GLuint prog = oglu_build_program_from_file(path, core_profile);
+
+                    if (prog)
+                        g_ogl.mid_program[g_ogl.mid_count++] = prog;
+                }
+            }
+        }
+        else if (g_ogl.shader1_program)
         {
             if (strlen(shader_path) <= sizeof(shader_path) - 8)
             {
@@ -972,6 +1050,119 @@ static void ogl_init_shader2_program()
         glUniformMatrix4fv(loc, 1, GL_FALSE, mvp_matrix);
 }
 
+static void ogl_init_mid_programs()
+{
+    float scale_w = (float)g_ddraw.render.viewport.width / g_ogl.surface_tex_width;
+    float scale_h = (float)g_ddraw.render.viewport.height / g_ogl.surface_tex_height;
+
+    for (int i = 0; i < g_ogl.mid_count; i++)
+    {
+        GLuint prog = g_ogl.mid_program[i];
+
+        glUseProgram(prog);
+
+        GLint vertex_coord_attr_loc = glGetAttribLocation(prog, "VertexCoord");
+        if (vertex_coord_attr_loc == -1)
+            vertex_coord_attr_loc = glGetAttribLocation(prog, "a_position");
+
+        GLint tex_coord_attr_loc = glGetAttribLocation(prog, "TexCoord");
+
+        glGenBuffers(3, g_ogl.mid_vbos[i]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, g_ogl.mid_vbos[i][0]);
+        static const GLfloat vertex_coord[] = {
+            -1.0f,-1.0f,
+            -1.0f, 1.0f,
+             1.0f, 1.0f,
+             1.0f,-1.0f,
+        };
+        glBufferData(GL_ARRAY_BUFFER, sizeof(vertex_coord), vertex_coord, GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        glBindBuffer(GL_ARRAY_BUFFER, g_ogl.mid_vbos[i][1]);
+        GLfloat tex_coord[] = {
+            0.0f,    0.0f,
+            0.0f,    scale_h,
+            scale_w, scale_h,
+            scale_w, 0.0f,
+        };
+        glBufferData(GL_ARRAY_BUFFER, sizeof(tex_coord), tex_coord, GL_STATIC_DRAW);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        glGenVertexArrays(1, &g_ogl.mid_vao[i]);
+        glBindVertexArray(g_ogl.mid_vao[i]);
+
+        glBindBuffer(GL_ARRAY_BUFFER, g_ogl.mid_vbos[i][0]);
+        glVertexAttribPointer(vertex_coord_attr_loc, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+        glEnableVertexAttribArray(vertex_coord_attr_loc);
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+
+        if (tex_coord_attr_loc != -1)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, g_ogl.mid_vbos[i][1]);
+            glVertexAttribPointer(tex_coord_attr_loc, 2, GL_FLOAT, GL_FALSE, 0, NULL);
+            glEnableVertexAttribArray(tex_coord_attr_loc);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+        }
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, g_ogl.mid_vbos[i][2]);
+        static const GLushort indices[] =
+        {
+            0, 1, 2,
+            0, 2, 3,
+        };
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
+
+        glBindVertexArray(0);
+
+        float size[2] = { (float)g_ddraw.render.viewport.width, (float)g_ddraw.render.viewport.height };
+        float texture_size[2] = { (float)g_ogl.surface_tex_width, (float)g_ogl.surface_tex_height };
+
+        GLint loc = glGetUniformLocation(prog, "OutputSize");
+        if (loc == -1)
+            loc = glGetUniformLocation(prog, "rubyOutputSize");
+        if (loc != -1)
+            glUniform2fv(loc, 1, size);
+
+        loc = glGetUniformLocation(prog, "InputSize");
+        if (loc == -1)
+            loc = glGetUniformLocation(prog, "rubyInputSize");
+        if (loc != -1)
+            glUniform2fv(loc, 1, size);
+
+        loc = glGetUniformLocation(prog, "TextureSize");
+        if (loc == -1)
+            loc = glGetUniformLocation(prog, "rubyTextureSize");
+        if (loc != -1)
+            glUniform2fv(loc, 1, texture_size);
+
+        loc = glGetUniformLocation(prog, "Texture");
+        if (loc == -1)
+            loc = glGetUniformLocation(prog, "rubyTexture");
+        if (loc != -1)
+            glUniform1i(loc, 0);
+
+        loc = glGetUniformLocation(prog, "FrameDirection");
+        if (loc != -1)
+            glUniform1i(loc, 1);
+
+        g_ogl.mid_frame_count_uni_loc[i] = glGetUniformLocation(prog, "FrameCount");
+        if (g_ogl.mid_frame_count_uni_loc[i] == -1)
+            g_ogl.mid_frame_count_uni_loc[i] = glGetUniformLocation(prog, "rubyFrameCount");
+
+        const float mvp[16] = {
+            1,0,0,0,
+            0,1,0,0,
+            0,0,1,0,
+            0,0,0,1,
+        };
+
+        loc = glGetUniformLocation(prog, "MVPMatrix");
+        if (loc != -1)
+            glUniformMatrix4fv(loc, 1, GL_FALSE, mvp);
+    }
+}
+
 static void ogl_render()
 {
     BOOL needs_update = FALSE;
@@ -1110,7 +1301,10 @@ static void ogl_render()
             if (g_config.fixchilds)
             {
                 g_ddraw.child_window_exists = FALSE;
+                util_install_child_input_hook();
+                g_ddraw.input_child_next = NULL;
                 EnumChildWindows(g_ddraw.hwnd, util_enum_child_proc, (LPARAM)g_ddraw.primary);
+                g_ddraw.input_child = g_ddraw.input_child_next;
 
                 if (g_ddraw.render.width != g_ddraw.width || g_ddraw.render.height != g_ddraw.height)
                 {
@@ -1281,6 +1475,32 @@ static void ogl_render()
 
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
+            int src_fbo = 1;
+
+            for (int i = 0; i < g_ogl.mid_count; i++)
+            {
+                int dst_fbo = src_fbo ^ 1;
+
+                glViewport(0, 0, g_ddraw.render.viewport.width, g_ddraw.render.viewport.height);
+
+                glUseProgram(g_ogl.mid_program[i]);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D, g_ogl.frame_buffer_tex_id[src_fbo]);
+
+                glBindFramebuffer(GL_FRAMEBUFFER, g_ogl.frame_buffer_id[dst_fbo]);
+
+                if (g_ogl.mid_frame_count_uni_loc[i] != -1)
+                    glUniform1i(g_ogl.mid_frame_count_uni_loc[i], frames);
+
+                glBindVertexArray(g_ogl.mid_vao[i]);
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, 0);
+                glBindVertexArray(0);
+
+                glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+                src_fbo = dst_fbo;
+            }
+
             /* apply shader2 */
 
             if (g_ddraw.child_window_exists)
@@ -1298,10 +1518,10 @@ static void ogl_render()
 
             glUseProgram(g_ogl.shader2_program);
             glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, g_ogl.frame_buffer_tex_id[1]);
+            glBindTexture(GL_TEXTURE_2D, g_ogl.frame_buffer_tex_id[src_fbo]);
 
             glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, g_ogl.frame_buffer_tex_id[0]);
+            glBindTexture(GL_TEXTURE_2D, g_ogl.frame_buffer_tex_id[src_fbo ^ 1]);
 
             if (g_ogl.shader2_frame_count_uni_loc != -1)
                 glUniform1i(g_ogl.shader2_frame_count_uni_loc, frames);
@@ -1431,6 +1651,20 @@ static BOOL ogl_release_resources()
         if (glDeleteVertexArrays)
             glDeleteVertexArrays(1, &g_ogl.shader2_vao);
     }
+
+    for (int i = 0; i < g_ogl.mid_count; i++)
+    {
+        if (glDeleteBuffers)
+            glDeleteBuffers(3, g_ogl.mid_vbos[i]);
+
+        if (glDeleteVertexArrays)
+            glDeleteVertexArrays(1, &g_ogl.mid_vao[i]);
+
+        if (glDeleteProgram && g_ogl.mid_program[i])
+            glDeleteProgram(g_ogl.mid_program[i]);
+    }
+
+    g_ogl.mid_count = 0;
 
     if (glDeleteProgram)
     {

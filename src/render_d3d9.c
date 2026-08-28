@@ -669,7 +669,10 @@ DWORD WINAPI d3d9_render_main(void)
             if (g_config.fixchilds)
             {
                 g_ddraw.child_window_exists = FALSE;
+                util_install_child_input_hook();
+                g_ddraw.input_child_next = NULL;
                 EnumChildWindows(g_ddraw.hwnd, util_enum_child_proc, (LPARAM)g_ddraw.primary);
+                g_ddraw.input_child = g_ddraw.input_child_next;
 
                 if (g_ddraw.render.width != g_ddraw.width || g_ddraw.render.height != g_ddraw.height)
                 {

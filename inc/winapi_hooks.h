@@ -15,6 +15,8 @@ BOOL WINAPI fake_ClientToScreen(HWND hWnd, LPPOINT lpPoint);
 BOOL WINAPI fake_ScreenToClient(HWND hWnd, LPPOINT lpPoint);
 BOOL WINAPI fake_SetCursorPos(int X, int Y);
 HWND WINAPI fake_WindowFromPoint(POINT Point);
+HWND WINAPI fake_ChildWindowFromPoint(HWND hWndParent, POINT Point);
+HWND WINAPI fake_ChildWindowFromPointEx(HWND hWndParent, POINT Point, UINT flags);
 BOOL WINAPI fake_GetClipCursor(LPRECT lpRect);
 BOOL WINAPI fake_GetCursorInfo(PCURSORINFO pci);
 int WINAPI fake_GetSystemMetrics(int nIndex);

@@ -356,3 +356,7 @@ __pycache__/
 # Cake - Uncomment if you are using it
 # tools/**
 # !tools/packages.config
+
+# redistributable pack, rebuilt by build.cmd
+_dist/
+*.zip

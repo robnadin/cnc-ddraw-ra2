@@ -33,6 +33,7 @@ HRESULT dd_CreateEx(GUID* lpGuid, LPVOID* lplpDD, REFIID iid, IUnknown* pUnkOute
 #define FIX_CHILDS_DETECT_PAINT 2
 #define FIX_CHILDS_DETECT_HIDE 3
 #define FIX_CHILDS_DETECT_HIDE_NOSCALE 4
+#define FIX_CHILDS_REMAP_INPUT 5
 
 #define RESLIST_NORMAL 0
 #define RESLIST_MINI 1
@@ -170,6 +171,9 @@ typedef struct CNCDDRAW
     void* last_freed_surface; /* Nox hack */
     BOOL child_window_exists;
     BOOL got_child_windows;
+    HWND input_child;
+    HWND input_child_next;
+    HWND input_pressed;
     DWORD last_set_window_pos_tick; /* WINE hack */
     DWORD last_msg_pull_tick;
     SPEEDLIMITER ticks_limiter;

@@ -27,6 +27,8 @@ CLIENTTOSCREENPROC real_ClientToScreen = ClientToScreen;
 SCREENTOCLIENTPROC real_ScreenToClient = ScreenToClient;
 SETCURSORPOSPROC real_SetCursorPos = SetCursorPos;
 WINDOWFROMPOINTPROC real_WindowFromPoint = WindowFromPoint;
+CHILDWINDOWFROMPOINTPROC real_ChildWindowFromPoint = ChildWindowFromPoint;
+CHILDWINDOWFROMPOINTEXPROC real_ChildWindowFromPointEx = ChildWindowFromPointEx;
 GETCLIPCURSORPROC real_GetClipCursor = GetClipCursor;
 GETCURSORINFOPROC real_GetCursorInfo = GetCursorInfo;
 GETSYSTEMMETRICSPROC real_GetSystemMetrics = GetSystemMetrics;
@@ -99,6 +101,8 @@ HOOKLIST g_hook_hooklist[] =
             { "SetCursorPos", (PROC)fake_SetCursorPos, (PROC*)&real_SetCursorPos, 0 },
             { "GetClipCursor", (PROC)fake_GetClipCursor, (PROC*)&real_GetClipCursor, 0 },
             { "WindowFromPoint", (PROC)fake_WindowFromPoint, (PROC*)&real_WindowFromPoint, 0 },
+            { "ChildWindowFromPoint", (PROC)fake_ChildWindowFromPoint, (PROC*)&real_ChildWindowFromPoint, 0 },
+            { "ChildWindowFromPointEx", (PROC)fake_ChildWindowFromPointEx, (PROC*)&real_ChildWindowFromPointEx, 0 },
             { "GetCursorInfo", (PROC)fake_GetCursorInfo, (PROC*)&real_GetCursorInfo, 0 },
             { "GetSystemMetrics", (PROC)fake_GetSystemMetrics, (PROC*)&real_GetSystemMetrics, 0 },
             { "SetWindowPos", (PROC)fake_SetWindowPos, (PROC*)&real_SetWindowPos, 0 },
