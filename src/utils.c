@@ -975,6 +975,28 @@ static LRESULT CALLBACK util_passthrough_proc(HWND hwnd, UINT msg, WPARAM wparam
     if (msg == WM_NCHITTEST)
         return HTTRANSPARENT;
 
+    if (g_config.fixchilds == FIX_CHILDS_REMAP_INPUT &&
+        msg >= WM_MOUSEFIRST && msg <= WM_MOUSELAST &&
+        GetCapture() == hwnd &&
+        g_ddraw.render.viewport.width > 0 &&
+        g_ddraw.render.viewport.height > 0)
+    {
+        POINT pt;
+
+        if (real_GetCursorPos(&pt) && real_ScreenToClient(g_ddraw.hwnd, &pt))
+        {
+            pt.x = (LONG)((pt.x - g_ddraw.render.viewport.x) *
+                ((float)g_ddraw.width / g_ddraw.render.viewport.width));
+
+            pt.y = (LONG)((pt.y - g_ddraw.render.viewport.y) *
+                ((float)g_ddraw.height / g_ddraw.render.viewport.height));
+
+            real_MapWindowPoints(g_ddraw.hwnd, hwnd, &pt, 1);
+
+            lparam = MAKELPARAM(pt.x, pt.y);
+        }
+    }
+
     if (msg == WM_NCDESTROY)
     {
         real_SetWindowLongA(hwnd, GWL_WNDPROC, (LONG)prev);
