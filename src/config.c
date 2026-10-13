@@ -71,6 +71,7 @@ void cfg_load()
     GET_BOOL(g_config.singlecpu, "singlecpu", TRUE);
     GET_INT(g_config.resolutions, "resolutions", RESLIST_NORMAL);
     GET_INT(g_config.fixchilds, "fixchilds", FIX_CHILDS_DETECT_PAINT);
+    GET_BOOL(g_config.async_child_setup, "async_child_setup", FALSE);
     GET_BOOL(g_config.hook_peekmessage, "hook_peekmessage", FALSE);
 
     /* Undocumented settings */

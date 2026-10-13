@@ -12,6 +12,7 @@
 #include "mouse.h"
 #include "render_d3d9.h"
 #include "utils.h"
+#include "wndproc.h"
 #include "config.h"
 #include "versionhelpers.h"
 #include "delay_imports.h"
@@ -1060,6 +1061,33 @@ void util_install_child_input_hook()
         return;
 
     g_child_input_hook = SetWindowsHookExA(WH_CBT, util_child_cbt_proc, NULL, g_ddraw.gui_thread_id);
+}
+
+/* Do not subclass GUI windows from the renderer while holding g_ddraw.cs:
+ * Wine may wait for the GUI thread, which can be waiting for that same lock. */
+static volatile LONG g_child_setup_pending;
+
+void util_schedule_child_input_setup()
+{
+    if (InterlockedCompareExchange(&g_child_setup_pending, 1, 0) == 0)
+    {
+        if (!PostMessageA(g_ddraw.hwnd, WM_SETUP_CHILD_INPUT, 0, 0))
+            InterlockedExchange(&g_child_setup_pending, 0);
+    }
+}
+
+void util_update_child_input_setup()
+{
+    if (g_config.async_child_setup && g_config.fixchilds == FIX_CHILDS_REMAP_INPUT &&
+        GetCurrentThreadId() == g_ddraw.gui_thread_id)
+    {
+        util_install_child_input_hook();
+        g_ddraw.input_child_next = NULL;
+        /* REMAP_INPUT never dereferences the surface argument. */
+        EnumChildWindows(g_ddraw.hwnd, util_enum_child_proc, 0);
+        g_ddraw.input_child = g_ddraw.input_child_next;
+    }
+    InterlockedExchange(&g_child_setup_pending, 0);
 }
 
 int util_mouse_x_adjust()

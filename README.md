@@ -1,5 +1,27 @@
 # cnc-ddraw-ra2
 
+## Wine/macOS Yuri menu and save-loading fix
+
+This fork adds an opt-in OpenGL workaround for Yuri's Revenge hanging when selecting a campaign save with enlarged menus (`fixchilds=5`). It moves menu-window setup from the rendering thread to the game window's GUI thread using a coalesced posted message.
+
+```ini
+[ddraw]
+renderer=opengl
+
+[gamemd]
+fixchilds=5
+async_child_setup=true
+
+[ra2md]
+fixchilds=5
+async_child_setup=true
+```
+
+`async_child_setup` defaults to **false**. Other profiles retain their existing behavior. The workaround has been confirmed by one user on native macOS Steam with NotProton / CrossOver 26.3: enlarged menus and loading the same campaign save both worked. Broader gameplay stability, other Wine builds, native Windows, and Mental Omega have not been verified. The setting currently applies to the **OpenGL renderer only**.
+
+See [the setup, build and investigation notes](docs/notproton-yuri.md) and the [configuration snippets](examples/notproton-ra2-yuri.ini). No game executables, game content, saves, or Wine prefixes are included.
+
+
 **A fork of [cnc-ddraw](https://github.com/FunkyFr3sh/cnc-ddraw) built for Red Alert 2
 and Yuri's Revenge.** Not a general-purpose cnc-ddraw build.
 

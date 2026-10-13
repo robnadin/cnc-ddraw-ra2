@@ -137,6 +137,9 @@ LRESULT CALLBACK fake_WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam
 
     switch (uMsg)
     {
+    case WM_SETUP_CHILD_INPUT:
+        util_update_child_input_setup();
+        return 0;
     case WM_TAKE_SCREENSHOT:
     {
         if (g_ddraw.primary)

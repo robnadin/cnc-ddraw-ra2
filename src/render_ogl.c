@@ -1301,10 +1301,17 @@ static void ogl_render()
             if (g_config.fixchilds)
             {
                 g_ddraw.child_window_exists = FALSE;
-                util_install_child_input_hook();
-                g_ddraw.input_child_next = NULL;
-                EnumChildWindows(g_ddraw.hwnd, util_enum_child_proc, (LPARAM)g_ddraw.primary);
-                g_ddraw.input_child = g_ddraw.input_child_next;
+                if (g_config.async_child_setup && g_config.fixchilds == FIX_CHILDS_REMAP_INPUT)
+                {
+                    util_schedule_child_input_setup();
+                }
+                else
+                {
+                    util_install_child_input_hook();
+                    g_ddraw.input_child_next = NULL;
+                    EnumChildWindows(g_ddraw.hwnd, util_enum_child_proc, (LPARAM)g_ddraw.primary);
+                    g_ddraw.input_child = g_ddraw.input_child_next;
+                }
 
                 if (g_ddraw.render.width != g_ddraw.width || g_ddraw.render.height != g_ddraw.height)
                 {

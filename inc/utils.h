@@ -26,6 +26,8 @@ void util_set_window_rect(int x, int y, int width, int height, UINT flags);
 BOOL CALLBACK util_enum_thread_wnd_proc(HWND hwnd, LPARAM lParam);
 BOOL CALLBACK util_enum_child_proc(HWND hwnd, LPARAM lParam);
 void util_install_child_input_hook();
+void util_schedule_child_input_setup();
+void util_update_child_input_setup();
 int util_mouse_x_adjust();
 int util_mouse_y_adjust();
 BOOL util_detect_low_res_screen();

@@ -59,6 +59,7 @@ typedef struct CNCDDRAWCONFIG
     BOOL singlecpu;
     int resolutions;
     int fixchilds;
+    BOOL async_child_setup;
     BOOL hook_peekmessage;
 
     /* Undocumented settings */
